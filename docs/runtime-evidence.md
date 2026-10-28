@@ -1,90 +1,78 @@
-# Runtime Configuration Evidence
+## Before the fix: Docker validation
 
-## 1. Problem Diagnosis
+The original image contained a hardcoded `API_KEY` and used the incorrect variable name `LOGLEVEL`. Running the application without supplying `DATABASE_URL` caused it to fail.
 
-The original Dockerfile hardcoded `API_KEY` using an `ENV` instruction and misspelled `LOG_LEVEL` as `LOGLEVEL`.
+**Command:**
+```powershell
+docker logs app-before
+```
 
-Running the original image without `DATABASE_URL` produced:
-
+**Actual output:**
 ```text
 Error: DATABASE_URL is undefined
 ```
 
-The Docker build also warned about the hardcoded API key.
-
-## 2. Corrected Configuration
-
-The corrected Dockerfile does not bake `API_KEY` or `LOG_LEVEL` into the image. Configuration is supplied when the container starts.
-
-## 3. Local Runtime Instructions
-
-Create your local environment file from the example:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Edit `.env` to use local demo values for `DATABASE_URL` and `LOG_LEVEL`. Keep `.env` private and ignored by Git.
-
-Build the image:
-
-```powershell
-docker build -t envlab .
-```
-
-Supply the API key at runtime:
-
-```powershell
-$env:API_KEY = "local-demo-key"
-```
-
-Start the container:
-
-```powershell
-docker run --name app-fixed --env-file .env -e "API_KEY=$env:API_KEY" -p 8080:3000 envlab
-```
-
-## 4. Successful Verification
-
-Application logs:
+The original Docker build also produced this warning:
 
 ```text
+SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ENV "API_KEY")
+```
+
+## After the fix: Docker validation
+
+The corrected Dockerfile no longer hardcodes application environment variables. Configuration is supplied when the container starts.
+
+**Command:**
+```powershell
+docker logs app-fixed
+```
+
+**Actual output:**
+```text
+> env-config-lab@1.0.0 start
+> node server.js
+
 Starting app with log level: info
 Server is running on port 3000
 ```
 
-Environment-variable presence check:
+**Command:**
+```powershell
+docker exec app-fixed printenv
+```
 
+**Relevant output:**
+```text
+DATABASE_URL=postgres://localhost:5432/envlab
+LOG_LEVEL=info
+API_KEY=local-demo-key
+```
+
+The API key above is a local demonstration value, not a production secret.
+
+**Environment-variable presence check:**
 ```text
 DATABASE_URL: SET
 LOG_LEVEL: SET
 API_KEY: SET
 ```
 
-Health endpoint:
-
+**Health check:**
 ```text
-status: ok
+Invoke-RestMethod http://localhost:8080/health
+
+status
+------
+ok
 ```
 
-The container was tested locally. No Cloud Run deployment was performed.
+## Cloud Run configuration
 
-## 5. Cloud Run Configuration
+- Supply `LOG_LEVEL` using Cloud Run environment-variable configuration.
+- Supply `API_KEY` using Secret Manager and Cloud Run secret configuration.
+- Do not commit real credentials or bake secrets into the Docker image.
+- No Cloud Run deployment was performed for this validation.
 
-Set non-sensitive values at runtime:
+## Evidence limitations
 
-```bash
-gcloud run services update SERVICE_NAME --region REGION --set-env-vars LOG_LEVEL=info
-```
-
-Inject an API key stored in Google Secret Manager:
-
-```bash
-gcloud run services update SERVICE_NAME --region REGION --set-secrets API_KEY=API_KEY:latest
-```
-
-Replace the example service and region with actual values. Store database credentials in Secret Manager if they are included in `DATABASE_URL`.
-
-## 6. Evidence and Demonstration
-
-Attach the actual before-fix and after-fix screenshots, include the relevant Git commit history, and add the Google Drive link to the 3–6 minute demonstration video once uploaded and verified.
+The output above records the results of the local Docker validation. Screenshots and a video walkthrough must be attached or linked separately so the reviewer can inspect the evidence directly.
